@@ -1,0 +1,19 @@
+[package]
+name = "envconfig-derive"
+version = "1.4.0"
+edition = "2021"
+rust-version = "1.74"
+license = "MIT"
+description = "Derive macro for the envconfig crate."
+repository = "https://github.com/kelseyhightower/envconfig"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+proc-macro2 = "1"
+quote = "1"
+syn = { version = "2", features = ["full", "extra-traits"] }
+
+[lints.rust]
+unsafe_code = "forbid"

@@ -1,12 +1,13 @@
 # envconfig
 
-```Go
-import "github.com/kelseyhightower/envconfig"
+```toml
+[dependencies]
+envconfig = "1.4"
 ```
 
 ## Documentation
 
-See [godoc](http://godoc.org/github.com/kelseyhightower/envconfig)
+See [docs.rs](https://docs.rs/envconfig)
 
 ## Usage
 
@@ -24,47 +25,43 @@ export MYAPP_COLORCODES="red:1,green:2,blue:3"
 
 Write some code:
 
-```Go
-package main
+```rust
+use std::collections::HashMap;
 
-import (
-    "fmt"
-    "log"
-    "time"
+use envconfig::{Duration, EnvConfig};
 
-    "github.com/kelseyhightower/envconfig"
-)
-
-type Specification struct {
-    Debug       bool
-    Port        int
-    User        string
-    Users       []string
-    Rate        float32
-    Timeout     time.Duration
-    ColorCodes  map[string]int
+#[derive(Default, EnvConfig)]
+struct Specification {
+    debug: bool,
+    port: i32,
+    user: String,
+    users: Vec<String>,
+    rate: f32,
+    timeout: Duration,
+    color_codes: HashMap<String, i32>,
 }
 
-func main() {
-    var s Specification
-    err := envconfig.Process("myapp", &s)
-    if err != nil {
-        log.Fatal(err.Error())
-    }
-    format := "Debug: %v\nPort: %d\nUser: %s\nRate: %f\nTimeout: %s\n"
-    _, err = fmt.Printf(format, s.Debug, s.Port, s.User, s.Rate, s.Timeout)
-    if err != nil {
-        log.Fatal(err.Error())
+fn main() {
+    let mut s = Specification::default();
+    if let Err(err) = envconfig::process("myapp", &mut s) {
+        eprintln!("{err}");
+        std::process::exit(1);
     }
 
-    fmt.Println("Users:")
-    for _, u := range s.Users {
-        fmt.Printf("  %s\n", u)
+    println!("Debug: {}", s.debug);
+    println!("Port: {}", s.port);
+    println!("User: {}", s.user);
+    println!("Rate: {:.6}", s.rate);
+    println!("Timeout: {}", s.timeout);
+
+    println!("Users:");
+    for u in &s.users {
+        println!("  {u}");
     }
 
-    fmt.Println("Color codes:")
-    for k, v := range s.ColorCodes {
-        fmt.Printf("  %s: %d\n", k, v)
+    println!("Color codes:");
+    for (k, v) in &s.color_codes {
+        println!("  {k}: {v}");
     }
 }
 ```
@@ -87,34 +84,46 @@ Color codes:
   blue: 3
 ```
 
-## Struct Tag Support
+## Attribute Support
 
-Envconfig supports the use of struct tags to specify alternate, default, and required
+Envconfig supports the use of field attributes to specify alternate, default, and required
 environment variables.
+
+Go's implementation reads struct tags with `reflect` at run time. Rust has no
+run-time reflection, so the same information is declared with `#[envconfig(…)]`
+attributes and read by the derive macro at compile time.
 
 For example, consider the following struct:
 
-```Go
-type Specification struct {
-    ManualOverride1 string `envconfig:"manual_override_1"`
-    DefaultVar      string `default:"foobar"`
-    RequiredVar     string `required:"true"`
-    IgnoredVar      string `ignored:"true"`
-    AutoSplitVar    string `split_words:"true"`
-    RequiredAndAutoSplitVar    string `required:"true" split_words:"true"`
+```rust
+# use envconfig::EnvConfig;
+#[derive(Default, EnvConfig)]
+struct Specification {
+    #[envconfig(name = "manual_override_1")]
+    manual_override_1: String,
+    #[envconfig(default = "foobar")]
+    default_var: String,
+    #[envconfig(required)]
+    required_var: String,
+    #[envconfig(ignored)]
+    ignored_var: String,
+    #[envconfig(split_words)]
+    auto_split_var: String,
+    #[envconfig(required, split_words)]
+    required_and_auto_split_var: String,
 }
 ```
 
-Envconfig has automatic support for CamelCased struct elements when the
-`split_words:"true"` tag is supplied. Without this tag, `AutoSplitVar` above
-would look for an environment variable called `MYAPP_AUTOSPLITVAR`. With the
-setting applied it will look for `MYAPP_AUTO_SPLIT_VAR`. Note that numbers
+Envconfig has automatic support for CamelCased field names when the
+`split_words` attribute is supplied. Without this attribute, `auto_split_var`
+above would look for an environment variable called `MYAPP_AUTOSPLITVAR`. With
+the setting applied it will look for `MYAPP_AUTO_SPLIT_VAR`. Note that numbers
 will get globbed into the previous word. If the setting does not do the
 right thing, you may use a manual override.
 
-Envconfig will process value for `ManualOverride1` by populating it with the
-value for `MYAPP_MANUAL_OVERRIDE_1`. Without this struct tag, it would have
-instead looked up `MYAPP_MANUALOVERRIDE1`. With the `split_words:"true"` tag
+Envconfig will process the value for `manual_override_1` by populating it with
+the value for `MYAPP_MANUAL_OVERRIDE_1`. Without this attribute, it would have
+instead looked up `MYAPP_MANUALOVERRIDE1`. With the `split_words` attribute
 it would have looked up `MYAPP_MANUAL_OVERRIDE1`.
 
 ```Bash
@@ -131,99 +140,99 @@ it will return an error when asked to process the struct.  If
 `MYAPP_REQUIREDVAR` is present but empty, envconfig will not return an error.
 
 If envconfig can't find an environment variable in the form `PREFIX_MYVAR`, and there
-is a struct tag defined, it will try to populate your variable with an environment
-variable that directly matches the envconfig tag in your struct definition:
+is a `name` attribute defined, it will try to populate your variable with an environment
+variable that directly matches the attribute in your struct definition:
 
 ```shell
 export SERVICE_HOST=127.0.0.1
 export MYAPP_DEBUG=true
 ```
-```Go
-type Specification struct {
-    ServiceHost string `envconfig:"SERVICE_HOST"`
-    Debug       bool
+```rust
+# use envconfig::EnvConfig;
+#[derive(Default, EnvConfig)]
+struct Specification {
+    #[envconfig(name = "SERVICE_HOST")]
+    service_host: String,
+    debug: bool,
 }
 ```
 
-Envconfig won't process a field with the "ignored" tag set to "true", even if a corresponding
+Envconfig won't process a field with the `ignored` attribute set, even if a corresponding
 environment variable is set.
 
-## Supported Struct Field Types
+Rust has no anonymous struct embedding, so the two ways Go expands a nested
+struct are spelled explicitly: `#[envconfig(embedded)]` keeps the parent
+prefix, and `#[envconfig(nested)]` uses the field's own key as the prefix.
 
-envconfig supports these struct field types:
+Because Rust field names are `snake_case`, a field whose declared name cannot
+be spelled as an identifier — an acronym such as `TTL` — can set it with
+`#[envconfig(field_name = "TTL")]`. This name is what appears in error
+messages and what the environment variable name is derived from.
 
-  * string
-  * int8, int16, int32, int64
-  * bool
-  * float32, float64
-  * slices of any supported type
-  * maps (keys and values of any supported type)
-  * [encoding.TextUnmarshaler](https://golang.org/pkg/encoding/#TextUnmarshaler)
-  * [encoding.BinaryUnmarshaler](https://golang.org/pkg/encoding/#BinaryUnmarshaler)
-  * [time.Duration](https://golang.org/pkg/time/#Duration)
+## Supported Field Types
 
-Embedded structs using these fields are also supported.
+envconfig supports these field types:
+
+  * `String`
+  * `i8`, `i16`, `i32`, `i64`, `isize`
+  * `u8`, `u16`, `u32`, `u64`, `usize`
+  * `bool`
+  * `f32`, `f64`
+  * `Vec<T>` of any supported type (`Vec<u8>` takes the raw value, like Go's `[]byte`)
+  * `HashMap<K, V>` and `BTreeMap<K, V>` (keys and values of any supported type)
+  * `Option<T>` of any supported type
+  * types implementing [`TextUnmarshaler`](https://docs.rs/envconfig/latest/envconfig/trait.TextUnmarshaler.html)
+  * types implementing [`BinaryUnmarshaler`](https://docs.rs/envconfig/latest/envconfig/trait.BinaryUnmarshaler.html)
+  * [`Duration`](https://docs.rs/envconfig/latest/envconfig/struct.Duration.html), which parses Go's duration syntax
+  * [`Time`](https://docs.rs/envconfig/latest/envconfig/struct.Time.html), RFC 3339
+  * [`Url`](https://docs.rs/envconfig/latest/envconfig/struct.Url.html)
+
+Nested and embedded structs using these fields are also supported.
+
+Integers are parsed with base detection: `0x10` is 16, `010` is 8, `0b101` is
+5, and `_` may separate digits.
 
 ## Custom Decoders
 
-Any field whose type (or pointer-to-type) implements `envconfig.Decoder` can
-control its own deserialization:
+Any field whose type implements `envconfig::Decoder` can control its own
+deserialization:
 
 ```Bash
 export DNS_SERVER=8.8.8.8
 ```
 
-```Go
-type IPDecoder net.IP
+```rust
+use std::net::IpAddr;
 
-func (ipd *IPDecoder) Decode(value string) error {
-    *ipd = IPDecoder(net.ParseIP(value))
-    return nil
+use envconfig::{BoxError, Decoder, EnvConfig};
+
+#[derive(Default)]
+struct IpDecoder(Option<IpAddr>);
+
+impl Decoder for IpDecoder {
+    fn decode(&mut self, value: &str) -> Result<(), BoxError> {
+        self.0 = Some(value.parse()?);
+        Ok(())
+    }
 }
 
-type DNSConfig struct {
-    Address IPDecoder `envconfig:"DNS_SERVER"`
-}
-```
-
-Example for decoding the environment variables into map[string][]structName type
-
-```Bash
-export SMS_PROVIDER_WITH_WEIGHT= `IND=[{"name":"SMSProvider1","weight":70},{"name":"SMSProvider2","weight":30}];US=[{"name":"SMSProvider1","weight":100}]`
-```
-
-```GO
-type providerDetails struct {
-	Name   string
-	Weight int
-}
-
-type SMSProviderDecoder map[string][]providerDetails
-
-func (sd *SMSProviderDecoder) Decode(value string) error {
-	smsProvider := map[string][]providerDetails{}
-	pairs := strings.Split(value, ";")
-	for _, pair := range pairs {
-		providerdata := []providerDetails{}
-		kvpair := strings.Split(pair, "=")
-		if len(kvpair) != 2 {
-			return fmt.Errorf("invalid map item: %q", pair)
-		}
-		err := json.Unmarshal([]byte(kvpair[1]), &providerdata)
-		if err != nil {
-			return fmt.Errorf("invalid map json: %w", err)
-		}
-		smsProvider[kvpair[0]] = providerdata
-
-	}
-	*sd = SMSProviderDecoder(smsProvider)
-	return nil
-}
-
-type SMSProviderConfig struct {
-    ProviderWithWeight SMSProviderDecoder `envconfig:"SMS_PROVIDER_WITH_WEIGHT"`
+#[derive(Default, EnvConfig)]
+struct DnsConfig {
+    #[envconfig(name = "DNS_SERVER")]
+    address: IpDecoder,
 }
 ```
 
-Also, envconfig will use a `Set(string) error` method like from the
-[flag.Value](https://godoc.org/flag#Value) interface if implemented.
+Also, envconfig will use a `Setter` implementation — the counterpart of Go's
+[`flag.Value`](https://godoc.org/flag#Value) interface — if one is present.
+
+When a type implements more than one of the decoding traits, they are tried in
+this order, matching the original: `Decoder`, `Setter`, `TextUnmarshaler`,
+`BinaryUnmarshaler`, then the built-in rules.
+
+## Usage output
+
+`envconfig::usage` prints a table describing every variable the specification
+reads. `usagef` and `usaget` render a caller-supplied format, using the
+`usage_key`, `usage_description`, `usage_type`, `usage_default` and
+`usage_required` functions.

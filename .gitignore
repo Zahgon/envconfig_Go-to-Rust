@@ -1,0 +1,25 @@
+# Rust build artifacts
+/target/
+**/target/
+**/*.rs.bk
+*.pdb
+
+# Coverage / profiling data
+*.profraw
+*.profdata
+default_16227100447173007288_0_21242.profraw
+default_16227123536917190584_0_28784.profraw
+
+# macOS
+.DS_Store
+
+# Editors / IDEs
+.idea/
+.vscode/
+*.swp
+*~
+truth.md
+instruction.md
+fix.patch
+test.patch
+golden.patch
